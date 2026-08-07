@@ -139,6 +139,8 @@ elif [[ $step =~ ^\+([0-9]+)%$ ]]; then
   amount="${BASH_REMATCH[1]}"
   if (( amount == 5 && percent < 5 )); then
     (( target = percent + 1 ))
+  elif (( amount == 5 )); then
+    (( target = (percent / 5 + 1) * 5 ))
   else
     (( target = percent + amount ))
   fi
@@ -149,6 +151,8 @@ elif [[ $step =~ ^([0-9]+)%-$ ]]; then
   amount="${BASH_REMATCH[1]}"
   if (( amount == 5 && percent <= 5 )); then
     (( target = percent - 1 ))
+  elif (( amount == 5 )); then
+    (( target = ((percent - 1) / 5) * 5 ))
   else
     (( target = percent - amount ))
   fi

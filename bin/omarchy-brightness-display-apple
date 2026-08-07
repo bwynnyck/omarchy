@@ -86,6 +86,30 @@ if [[ $step =~ ^([0-9]+)%-$ ]]; then
   step="-${BASH_REMATCH[1]}%"
 fi
 
+if [[ $step == "+5%" || $step == "-5%" ]]; then
+  current="$(current_brightness "$device" || true)"
+  if [[ -z $current ]]; then
+    retry_with_fresh_device
+    current="$(current_brightness "$device")" || exit 1
+  fi
+
+  if [[ $step == "+5%" ]]; then
+    if (( current < 5 )); then
+      (( target = current + 1 ))
+    else
+      (( target = (current / 5 + 1) * 5 ))
+    fi
+  elif (( current <= 5 )); then
+    (( target = current - 1 ))
+  else
+    (( target = ((current - 1) / 5) * 5 ))
+  fi
+
+  (( target < 1 )) && target=1
+  (( target > 100 )) && target=100
+  step="$target%"
+fi
+
 if ! sudo asdcontrol "$device" -- "$step" >/dev/null; then
   retry_with_fresh_device
   sudo asdcontrol "$device" -- "$step" >/dev/null

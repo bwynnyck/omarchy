@@ -31,7 +31,7 @@ cat >"$mock_bin/brightnessctl" <<'SH'
 #!/bin/bash
 printf 'brightnessctl %s\n' "$*" >>"$CALL_LOG"
 if [[ $* == *" -m"* ]]; then
-  printf 'mock_backlight,backlight,40,40%%\n'
+  printf 'mock_backlight,backlight,%s,%s%%\n' "${BACKLIGHT_CURRENT:-40}" "${BACKLIGHT_CURRENT:-40}"
 fi
 SH
 
@@ -128,6 +128,62 @@ DDC_CURRENT=4 DDC_MAXIMUM=100 run_brightness --no-osd --monitor DP-1 +5%
 grep -F 'ddcutil --bus 7 --skip-ddc-checks --noverify setvcp 10 5' "$call_log" >/dev/null || \
   fail "external low brightness writes the one-percent target"
 pass "external low brightness uses a one-percent step"
+
+for case in "1 +5% 2" "2 +5% 3" "4 +5% 5" "5 +5% 10" "6 +5% 10" \
+  "1 5%- 1" "2 5%- 1" "4 5%- 3" "5 5%- 4" "6 5%- 5" "7 5%- 5" \
+  "10 5%- 5" "87 5%- 85" "87 +5% 90" "100 +5% 100"; do
+  read -r current step expected <<<"$case"
+  : >"$call_log"
+  BACKLIGHT_CURRENT="$current" run_brightness --no-osd --monitor eDP-1 "$step"
+  grep -F "brightnessctl -d mock_backlight set $expected%" "$call_log" >/dev/null || \
+    fail "internal brightness $step snaps $current to $expected"
+done
+pass "internal normal brightness actions snap with low-brightness fine control"
+
+rm -f "$runtime_dir/omarchy-brightness-display-ddc/DP-1.bus"
+for case in "7 5%- 5" "87 5%- 85" "87 +5% 90"; do
+  read -r current step expected <<<"$case"
+  : >"$call_log"
+  DDC_CURRENT="$current" DDC_MAXIMUM=100 run_brightness --no-osd --monitor DP-1 "$step"
+  grep -F "ddcutil --bus 7 --skip-ddc-checks --noverify setvcp 10 $expected" "$call_log" >/dev/null || \
+    fail "external brightness $step snaps $current to $expected"
+done
+pass "DDC normal brightness actions snap to five-percent steps"
+
+apple_device="$test_tmp/hiddev0"
+touch "$apple_device"
+printf '%s\n' "$apple_device" >"$runtime_dir/omarchy-brightness-display-apple.device"
+cat >"$mock_bin/sudo" <<'SH'
+#!/bin/bash
+printf 'sudo %s\n' "$*" >>"$CALL_LOG"
+if [[ $1 == "asdcontrol" && ${3:-} != "--" ]]; then
+  printf 'BRIGHTNESS=%s\n' "$((${APPLE_CURRENT:-40} * 600))"
+fi
+SH
+chmod +x "$mock_bin/sudo"
+
+run_apple_brightness() {
+  CALL_LOG="$call_log" XDG_RUNTIME_DIR="$runtime_dir" PATH="$mock_bin:$ROOT/bin:$PATH" \
+    "$ROOT/bin/omarchy-brightness-display-apple" --no-osd "$@"
+}
+
+for case in "1 +5% 2" "5 +5% 10" "7 5%- 5" "87 5%- 85" "87 +5% 90" "100 +5% 100"; do
+  read -r current step expected <<<"$case"
+  : >"$call_log"
+  APPLE_CURRENT="$current" run_apple_brightness "$step"
+  grep -F "sudo asdcontrol $apple_device -- $expected%" "$call_log" >/dev/null || \
+    fail "Apple brightness $step snaps $current to $expected"
+done
+pass "Apple normal brightness actions snap with low-brightness fine control"
+
+: >"$call_log"
+APPLE_CURRENT=87 run_apple_brightness +1%
+grep -F "sudo asdcontrol $apple_device -- +1%" "$call_log" >/dev/null || \
+  fail "Apple precise brightness remains relative"
+APPLE_CURRENT=87 run_apple_brightness 42%
+grep -F "sudo asdcontrol $apple_device -- 42%" "$call_log" >/dev/null || \
+  fail "Apple absolute brightness remains unchanged"
+pass "Apple precise and absolute brightness actions do not snap"
 
 cat >"$mock_bin/hyprctl" <<'SH'
 #!/bin/bash

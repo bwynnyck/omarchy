@@ -98,7 +98,7 @@ else
     if (( current < 5 )); then
       (( target = current + 1 ))
     else
-      (( target = current + 5 ))
+      (( target = (current / 5 + 1) * 5 ))
     fi
 
     (( target > 100 )) && target=100
@@ -107,7 +107,7 @@ else
     if (( current <= 5 )); then
       (( target = current - 1 ))
     else
-      (( target = current - 5 ))
+      (( target = ((current - 1) / 5) * 5 ))
     fi
 
     (( target < 1 )) && target=1
